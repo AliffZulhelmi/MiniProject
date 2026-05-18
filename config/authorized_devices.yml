@@ -1,0 +1,7 @@
+authorized_devices:
+  - label: Demo Laptop
+    mac: "AA:BB:CC:DD:EE:01"
+    role: test-client
+  - label: Demo Phone
+    mac: "AA:BB:CC:DD:EE:02"
+    role: test-client

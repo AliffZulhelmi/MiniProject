@@ -1,0 +1,22 @@
+[project]
+name = "mini-wids-dashboard"
+version = "0.1.0"
+description = "Mini wireless intrusion detection dashboard for rogue AP, deauth, unknown device, and weak encryption alerts."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.ruff]
+line-length = 88
+extend-select = ["E", "F", "W", "C", "B", "SIM", "S"]

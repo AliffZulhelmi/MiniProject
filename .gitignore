@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+.env
+*.db
+*.sqlite
+*.sqlite3
+
+# Capture evidence can become large and may include sensitive network metadata.
+data/raw_pcaps/*
+data/exports/*
+data/logs/*
+data/evidence/*
+!data/raw_pcaps/.gitkeep
+!data/exports/.gitkeep
+!data/logs/.gitkeep
+!data/evidence/.gitkeep
+
+# Keep small curated sample captures only when intentionally added.
+data/sample_pcaps/*
+!data/sample_pcaps/README.md

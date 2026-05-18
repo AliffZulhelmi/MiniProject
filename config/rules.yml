@@ -1,0 +1,17 @@
+deauth:
+  window_seconds: 10
+  packet_threshold: 20
+
+rogue_ap:
+  alert_on_unknown_bssid_for_known_ssid: true
+  alert_on_security_downgrade: true
+
+unknown_device:
+  alert_on_first_seen: true
+
+weak_encryption:
+  weak_modes:
+    - OPEN
+    - WEP
+  warning_modes:
+    - WPA
