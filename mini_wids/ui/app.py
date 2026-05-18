@@ -9,8 +9,14 @@ from pathlib import Path
 from mini_wids.engine import process_pcap
 from mini_wids.sample_pcap_generator import write_demo_pcap
 from mini_wids.storage.repository import save_alerts
+from mini_wids.ui.alert_tables import (
+    available_detector_labels,
+    build_normalized_tables,
+    build_raw_table,
+    filter_rows,
+    flatten_results,
+)
 import plotly.express as px
-import pandas as pd
 
 st.set_page_config(page_title="Mini WIDS Demo", layout="wide")
 st.title("Mini WIDS — Demo")
@@ -50,57 +56,43 @@ with col2:
             st.write("Processing:", str(pcap_path))
             results = process_pcap(str(pcap_path))
 
-            # Flatten results for display and charting
-            rows = []
-            for det, vals in results.items():
-                if isinstance(vals, dict) and vals.get("error"):
-                    rows.append(
-                        {
-                            "detector": det,
-                            "alert": "error",
-                            "details": vals.get("error"),
-                        }
-                    )
-                    continue
-                try:
-                    for it in vals:
-                        if isinstance(it, dict):
-                            rows.append(
-                                {"detector": det, "alert": str(it), "details": it}
-                            )
-                        else:
-                            rows.append(
-                                {"detector": det, "alert": str(it), "details": it}
-                            )
-                except Exception:
-                    rows.append({"detector": det, "alert": str(vals), "details": vals})
+            rows = flatten_results(results)
+            detector_options = available_detector_labels(rows)
+            selected_detector = st.selectbox("Detector", detector_options)
+            table_mode = st.radio("Table view", ["Raw", "Normalized"], horizontal=True)
+            filtered_rows = filter_rows(rows, selected_detector)
 
-            df = pd.DataFrame(rows)
+            df = build_raw_table(filtered_rows)
 
-            # Chart: alerts by detector
             if not df.empty:
-                counts = df.groupby("detector").size().reset_index(name="count")
+                counts = df.groupby("Detector").size().reset_index(name="count")
                 fig = px.bar(
                     counts,
-                    x="detector",
+                    x="Detector",
                     y="count",
-                    color="detector",
+                    color="Detector",
                     title="Alerts by Detector",
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Alerts")
-            st.dataframe(df[["detector", "alert"]].head(200))
+            if not filtered_rows:
+                st.info("No alerts match the selected detector.")
+            elif table_mode == "Raw":
+                st.dataframe(df.head(200))
+            else:
+                for detector, table in build_normalized_tables(filtered_rows).items():
+                    st.markdown(f"#### {detector}")
+                    st.dataframe(table.head(200))
 
             if st.button("Save alerts to DB"):
                 flat = []
-                for r in rows:
+                for row in filtered_rows:
+                    details = row.get("details")
                     entry = {
-                        "detector": r.get("detector"),
+                        "detector": row.get("detector"),
                         **(
-                            r.get("details")
-                            if isinstance(r.get("details"), dict)
-                            else {"value": r.get("details")}
+                            details if isinstance(details, dict) else {"value": details}
                         ),
                     }
                     flat.append(entry)
