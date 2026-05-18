@@ -5,8 +5,8 @@ from pathlib import Path
 from scapy.layers.dot11 import Dot11, Dot11Deauth, Dot11Elt
 from scapy.utils import wrpcap
 
+from mini_wids import sample_pcap_generator as gen
 from mini_wids.engine import process_pcap
-from scripts import generate_sample_pcap as gen
 
 
 def _ssid_values(packet):
@@ -111,3 +111,16 @@ def test_generated_pcap_triggers_existing_detectors(tmp_path: Path):
     assert "ff:ff:ff:ff:ff:ff" not in rogue_bssids
     assert scenario.attacker.mac not in rogue_bssids
     assert scenario.victim.mac not in rogue_bssids
+
+
+def test_write_demo_pcap_creates_processable_file(tmp_path: Path):
+    pcap_file = tmp_path / "dashboard_sample.pcap"
+
+    written = gen.write_demo_pcap(output=pcap_file, seed=20260518)
+    results = process_pcap(str(written))
+
+    assert written == pcap_file
+    assert pcap_file.exists()
+    assert results["deauth"]
+    assert results["rogue_ap"]
+    assert results["weak_encryption"]
