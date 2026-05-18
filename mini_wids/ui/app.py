@@ -7,24 +7,26 @@ detector outputs. It can optionally save alerts to the repository.
 import streamlit as st
 from pathlib import Path
 from mini_wids.engine import process_pcap
+from mini_wids.sample_pcap_generator import write_demo_pcap
 from mini_wids.storage.repository import save_alerts
 import plotly.express as px
 import pandas as pd
 
-
 st.set_page_config(page_title="Mini WIDS Demo", layout="wide")
 st.title("Mini WIDS — Demo")
 
-st.markdown("Upload a PCAP (or generate the sample) to run detectors. Results are visualized below.")
+st.markdown(
+    "Upload a PCAP (or generate the sample) to run detectors. "
+    "Results are visualized below."
+)
 
-uploaded = st.file_uploader("PCAP file", type=["pcap", "pcapng"]) 
+uploaded = st.file_uploader("PCAP file", type=["pcap", "pcapng"])
 col1, col2 = st.columns([1, 3])
 
 with col1:
     if st.button("Generate sample pcap"):
-        import scripts.generate_sample_pcap as gen
-
-        gen.main()
+        write_demo_pcap()
+        st.success("Generated sample PCAP")
 
     pcap_path = None
     if uploaded is not None:
@@ -52,14 +54,24 @@ with col2:
             rows = []
             for det, vals in results.items():
                 if isinstance(vals, dict) and vals.get("error"):
-                    rows.append({"detector": det, "alert": "error", "details": vals.get("error")})
+                    rows.append(
+                        {
+                            "detector": det,
+                            "alert": "error",
+                            "details": vals.get("error"),
+                        }
+                    )
                     continue
                 try:
                     for it in vals:
                         if isinstance(it, dict):
-                            rows.append({"detector": det, "alert": str(it), "details": it})
+                            rows.append(
+                                {"detector": det, "alert": str(it), "details": it}
+                            )
                         else:
-                            rows.append({"detector": det, "alert": str(it), "details": it})
+                            rows.append(
+                                {"detector": det, "alert": str(it), "details": it}
+                            )
                 except Exception:
                     rows.append({"detector": det, "alert": str(vals), "details": vals})
 
@@ -68,16 +80,29 @@ with col2:
             # Chart: alerts by detector
             if not df.empty:
                 counts = df.groupby("detector").size().reset_index(name="count")
-                fig = px.bar(counts, x="detector", y="count", color="detector", title="Alerts by Detector")
+                fig = px.bar(
+                    counts,
+                    x="detector",
+                    y="count",
+                    color="detector",
+                    title="Alerts by Detector",
+                )
                 st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Alerts")
-            st.dataframe(df[ ["detector", "alert"] ].head(200))
+            st.dataframe(df[["detector", "alert"]].head(200))
 
             if st.button("Save alerts to DB"):
                 flat = []
                 for r in rows:
-                    entry = {"detector": r.get("detector"), **(r.get("details") if isinstance(r.get("details"), dict) else {"value": r.get("details")})}
+                    entry = {
+                        "detector": r.get("detector"),
+                        **(
+                            r.get("details")
+                            if isinstance(r.get("details"), dict)
+                            else {"value": r.get("details")}
+                        ),
+                    }
                     flat.append(entry)
                 save_alerts(flat)
                 st.success("Saved alerts")
