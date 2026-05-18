@@ -23,8 +23,10 @@ from mini_wids.sample_pcap_generator import (
     make_association_request,
     make_beacon,
     make_deauth,
+    next_demo_pcap_path,
     random_mac,
     write_demo_pcap,
+    write_numbered_demo_pcap,
 )
 
 __all__ = [
@@ -42,8 +44,10 @@ __all__ = [
     "make_association_request",
     "make_beacon",
     "make_deauth",
+    "next_demo_pcap_path",
     "random_mac",
     "write_demo_pcap",
+    "write_numbered_demo_pcap",
 ]
 
 

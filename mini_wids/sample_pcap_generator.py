@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +19,10 @@ from scapy.utils import wrpcap
 
 DEFAULT_SEED = 20260518
 DEFAULT_OUTPUT = Path("data/sample_pcaps/demo_capture.pcap")
+DEFAULT_DEAUTH_ALERTS = 45
+DEFAULT_ROGUE_AP_ALERTS = 8
+DEFAULT_WEAK_ENCRYPTION_ALERTS = 35
+DEAUTH_FRAMES_PER_ATTACKER = 5
 
 FAKE_DEVICE_NAMES = (
     "ThinkPad-T14",
@@ -69,6 +74,12 @@ class DemoScenario:
     weak_ap: FakeAccessPoint
 
 
+@dataclass(frozen=True)
+class GeneratedPcap:
+    path: Path
+    seed: int
+
+
 def build_rng(seed: int = DEFAULT_SEED) -> random.Random:
     return random.Random(seed)  # noqa: S311 - deterministic fake demo data only
 
@@ -97,6 +108,24 @@ def _unique_mac(rng: random.Random, used: set[str]) -> str:
         mac = random_mac(rng)
     used.add(mac)
     return mac
+
+
+def random_demo_seed() -> int:
+    return time.time_ns() % (2**32)
+
+
+def next_demo_pcap_path(
+    output_dir: str | Path = DEFAULT_OUTPUT.parent,
+    stem: str = DEFAULT_OUTPUT.stem,
+    suffix: str = DEFAULT_OUTPUT.suffix,
+) -> Path:
+    output_path = Path(output_dir)
+    index = 1
+    while True:
+        candidate = output_path / f"{stem}_{index:03d}{suffix}"
+        if not candidate.exists():
+            return candidate
+        index += 1
 
 
 def build_demo_scenario(seed: int = DEFAULT_SEED) -> DemoScenario:
@@ -179,19 +208,31 @@ def make_association_request(src: str, bssid: str, device_name: str, ssid: str):
     )
 
 
-def build_demo_packets(seed: int = DEFAULT_SEED):
+def build_demo_packets(
+    seed: int = DEFAULT_SEED,
+    deauth_alerts: int = DEFAULT_DEAUTH_ALERTS,
+    rogue_ap_alerts: int = DEFAULT_ROGUE_AP_ALERTS,
+    weak_encryption_alerts: int = DEFAULT_WEAK_ENCRYPTION_ALERTS,
+):
     scenario = build_demo_scenario(seed)
+    rng = build_rng(seed + 1)
+    used_macs = {
+        scenario.attacker.mac,
+        scenario.victim.mac,
+        scenario.authorized_ap.bssid,
+        "AA:BB:CC:DD:EE:01".lower(),
+        "AA:BB:CC:DD:EE:02".lower(),
+    }
     packets = []
 
-    for _ in range(6):
-        packets.append(
-            make_deauth(
-                scenario.attacker.mac,
-                scenario.victim.mac,
-                bssid=scenario.authorized_ap.bssid,
-            )
+    packets.append(
+        make_beacon(
+            scenario.authorized_ap.bssid,
+            scenario.authorized_ap.ssid,
+            security=scenario.authorized_ap.security,
+            channel=scenario.authorized_ap.channel,
         )
-
+    )
     packets.append(
         make_association_request(
             scenario.attacker.mac,
@@ -208,14 +249,14 @@ def build_demo_packets(seed: int = DEFAULT_SEED):
             scenario.authorized_ap.ssid,
         )
     )
-    packets.append(
-        make_beacon(
-            scenario.authorized_ap.bssid,
-            scenario.authorized_ap.ssid,
-            security=scenario.authorized_ap.security,
-            channel=scenario.authorized_ap.channel,
+    for _ in range(DEAUTH_FRAMES_PER_ATTACKER):
+        packets.append(
+            make_deauth(
+                scenario.attacker.mac,
+                scenario.victim.mac,
+                bssid=scenario.authorized_ap.bssid,
+            )
         )
-    )
     packets.append(
         make_beacon(
             scenario.rogue_ap.bssid,
@@ -233,6 +274,54 @@ def build_demo_packets(seed: int = DEFAULT_SEED):
         )
     )
 
+    for _ in range(deauth_alerts):
+        attacker = FakeDevice(
+            name=choose_fake_device(rng),
+            mac=_unique_mac(rng, used_macs),
+        )
+        packets.append(
+            make_association_request(
+                attacker.mac,
+                scenario.authorized_ap.bssid,
+                attacker.name,
+                scenario.authorized_ap.ssid,
+            )
+        )
+        for _ in range(DEAUTH_FRAMES_PER_ATTACKER):
+            packets.append(
+                make_deauth(
+                    attacker.mac,
+                    scenario.victim.mac,
+                    bssid=scenario.authorized_ap.bssid,
+                )
+            )
+
+    for _ in range(rogue_ap_alerts):
+        rogue_ap = FakeAccessPoint(
+            ssid=choose_fake_ssid(rng),
+            bssid=_unique_mac(rng, used_macs),
+            security="WPA2",
+            channel=rng.choice((1, 6, 11)),
+        )
+        packets.append(
+            make_beacon(
+                rogue_ap.bssid,
+                rogue_ap.ssid,
+                security=rogue_ap.security,
+                channel=rogue_ap.channel,
+            )
+        )
+
+    for _ in range(weak_encryption_alerts):
+        packets.append(
+            make_beacon(
+                scenario.authorized_ap.bssid,
+                choose_fake_ssid(rng),
+                security=choose_weak_security(rng),
+                channel=scenario.authorized_ap.channel,
+            )
+        )
+
     return packets
 
 
@@ -244,3 +333,13 @@ def write_demo_pcap(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wrpcap(str(output_path), build_demo_packets(seed=seed))
     return output_path
+
+
+def write_numbered_demo_pcap(
+    output_dir: str | Path = DEFAULT_OUTPUT.parent,
+    seed: int | None = None,
+) -> GeneratedPcap:
+    chosen_seed = random_demo_seed() if seed is None else seed
+    output_path = next_demo_pcap_path(output_dir)
+    written = write_demo_pcap(output=output_path, seed=chosen_seed)
+    return GeneratedPcap(path=written, seed=chosen_seed)

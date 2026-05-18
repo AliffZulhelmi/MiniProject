@@ -7,7 +7,7 @@ detector outputs. It can optionally save alerts to the repository.
 import streamlit as st
 from pathlib import Path
 from mini_wids.engine import process_pcap
-from mini_wids.sample_pcap_generator import write_demo_pcap
+from mini_wids.sample_pcap_generator import write_numbered_demo_pcap
 from mini_wids.storage.repository import save_alerts
 from mini_wids.ui.alert_tables import (
     available_detector_labels,
@@ -29,26 +29,47 @@ st.markdown(
 uploaded = st.file_uploader("PCAP file", type=["pcap", "pcapng"])
 col1, col2 = st.columns([1, 3])
 
-with col1:
-    if st.button("Generate sample pcap"):
-        write_demo_pcap()
-        st.success("Generated sample PCAP")
+if "selected_pcap_path" not in st.session_state:
+    st.session_state.selected_pcap_path = None
+if "uploaded_pcap_name" not in st.session_state:
+    st.session_state.uploaded_pcap_name = None
+if "generated_pcap_seed" not in st.session_state:
+    st.session_state.generated_pcap_seed = None
 
-    pcap_path = None
+with col1:
     if uploaded is not None:
         dest = Path("data/raw_pcaps")
         dest.mkdir(parents=True, exist_ok=True)
         p = dest / uploaded.name
-        with open(p, "wb") as fh:
-            fh.write(uploaded.getbuffer())
-        pcap_path = p
+        if st.session_state.uploaded_pcap_name != uploaded.name:
+            with open(p, "wb") as fh:
+                fh.write(uploaded.getbuffer())
+            st.session_state.selected_pcap_path = str(p)
+            st.session_state.uploaded_pcap_name = uploaded.name
+            st.session_state.generated_pcap_seed = None
 
-    if st.button("Process sample pcap"):
-        pcap_path = Path("data/sample_pcaps/demo_capture.pcap")
+    if st.button("Generate sample pcap"):
+        generated = write_numbered_demo_pcap()
+        st.session_state.selected_pcap_path = str(generated.path)
+        st.session_state.generated_pcap_seed = generated.seed
+        st.success(
+            f"Generated and selected {generated.path.name} "
+            f"({generated.path.stat().st_size} bytes)"
+        )
+
+    pcap_path = (
+        Path(st.session_state.selected_pcap_path)
+        if st.session_state.selected_pcap_path
+        else None
+    )
+    if pcap_path is not None:
+        st.caption(f"Selected PCAP: {pcap_path}")
+    if st.session_state.generated_pcap_seed is not None:
+        st.caption(f"Sample seed: {st.session_state.generated_pcap_seed}")
 
 with col2:
     if pcap_path is None:
-        st.info("Upload a pcap, generate the sample, or press 'Process sample pcap'.")
+        st.info("Upload a pcap or generate a sample pcap.")
     else:
         if not pcap_path.exists():
             st.error(f"PCAP not found: {pcap_path}")
@@ -73,7 +94,7 @@ with col2:
                     color="Detector",
                     title="Alerts by Detector",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             st.subheader("Alerts")
             if not filtered_rows:
@@ -98,4 +119,3 @@ with col2:
                     flat.append(entry)
                 save_alerts(flat)
                 st.success("Saved alerts")
-"""Streamlit dashboard entry point."""

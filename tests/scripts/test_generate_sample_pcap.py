@@ -9,6 +9,11 @@ from mini_wids import sample_pcap_generator as gen
 from mini_wids.engine import process_pcap
 
 
+def _alert_counts(path: Path) -> dict[str, int]:
+    results = process_pcap(str(path))
+    return {detector: len(alerts) for detector, alerts in results.items()}
+
+
 def _ssid_values(packet):
     values = []
     element = packet.getlayer(Dot11Elt)
@@ -84,6 +89,44 @@ def test_build_demo_packets_contains_detector_friendly_wireless_events():
     assert any(mode.lower() in packet_text.lower() for mode in gen.WEAK_SECURITY_MODES)
     assert f"device={scenario.attacker.name}" in packet_text
     assert f"device={scenario.victim.name}" in packet_text
+
+
+def test_default_demo_pcap_produces_large_mixed_alert_sample(tmp_path: Path):
+    pcap_file = tmp_path / "dashboard_sample.pcap"
+
+    written = gen.write_demo_pcap(output=pcap_file, seed=20260518)
+    counts = _alert_counts(written)
+    total_alerts = sum(counts.values())
+
+    assert 100 <= total_alerts <= 200
+    assert counts["deauth"] >= 30
+    assert counts["rogue_ap"] >= 5
+    assert counts["unknown_device"] >= 30
+    assert counts["weak_encryption"] >= 20
+
+    results = process_pcap(str(written))
+    unknown_infos = {
+        alert.get("info")
+        for alert in results["unknown_device"]
+        if alert.get("info") is not None
+    }
+    assert unknown_infos & set(gen.FAKE_DEVICE_NAMES)
+
+
+def test_different_seeds_generate_different_demo_samples(tmp_path: Path):
+    first = gen.write_demo_pcap(output=tmp_path / "first.pcap", seed=20260518)
+    second = gen.write_demo_pcap(output=tmp_path / "second.pcap", seed=20260519)
+
+    assert first.read_bytes() != second.read_bytes()
+
+
+def test_next_demo_pcap_path_uses_incrementing_number(tmp_path: Path):
+    assert gen.next_demo_pcap_path(tmp_path) == tmp_path / "demo_capture_001.pcap"
+
+    (tmp_path / "demo_capture_001.pcap").touch()
+    (tmp_path / "demo_capture_002.pcap").touch()
+
+    assert gen.next_demo_pcap_path(tmp_path) == tmp_path / "demo_capture_003.pcap"
 
 
 def test_generated_pcap_triggers_existing_detectors(tmp_path: Path):
