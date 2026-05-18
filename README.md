@@ -22,10 +22,23 @@ Run demonstrations only on an owned lab router and owned test devices. Do not ca
 
 ## Setup
 
+### WSL / Linux / macOS
+
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+python -m pip install -e .
+pytest
+```
+
+### Windows PowerShell
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install -e .
 pytest
 ```
 
@@ -44,10 +57,16 @@ Or run the provided demo script (Linux/macOS):
 scripts/run_pcap_demo.sh
 ```
 
-## Planned UI Command
+## Usage
 
 ```bash
 streamlit run mini_wids/ui/app.py
+```
+
+If `streamlit` is not on your PATH, use:
+
+```bash
+python -m streamlit run mini_wids/ui/app.py
 ```
 
 See `docs/project-structure.md` and `docs/superpowers/plans/2026-05-15-mini-wids-dashboard.md` for the implementation map.
