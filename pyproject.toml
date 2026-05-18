@@ -1,8 +1,25 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mini-wids-dashboard"
 version = "0.1.0"
 description = "Mini wireless intrusion detection dashboard for rogue AP, deauth, unknown device, and weak encryption alerts."
 requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.37",
+    "scapy>=2.5.0",
+    "pandas>=2.0",
+    "plotly>=5.0",
+    "PyYAML>=6.0",
+]
+
+[tool.setuptools]
+packages = ["mini_wids"]
+
+[tool.setuptools.package-data]
+mini_wids = ["**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

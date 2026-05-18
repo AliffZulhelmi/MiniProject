@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: mini-wids-dashboard
+Version: 0.1.0
+Summary: Mini wireless intrusion detection dashboard for rogue AP, deauth, unknown device, and weak encryption alerts.
+Requires-Python: >=3.10
+Requires-Dist: streamlit>=1.37
+Requires-Dist: scapy>=2.5.0
+Requires-Dist: pandas>=2.0
+Requires-Dist: plotly>=5.0
+Requires-Dist: PyYAML>=6.0
