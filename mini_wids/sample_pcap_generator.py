@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import random
 import time
 from dataclasses import dataclass
@@ -23,6 +25,33 @@ DEFAULT_DEAUTH_ALERTS = 45
 DEFAULT_ROGUE_AP_ALERTS = 8
 DEFAULT_WEAK_ENCRYPTION_ALERTS = 35
 DEAUTH_FRAMES_PER_ATTACKER = 5
+RANDOM_PREFIX = "random_capture"
+
+ALERT_TYPE_SLUGS = {
+    "deauth": "deauth",
+    "rogue_ap": "rogue-ap",
+    "weak_encryption": "weak-encryption",
+    "unknown_device": "unknown-device",
+}
+AUTHORIZED_CLIENT_MACS = ("aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02")
+
+ALERT_TYPE_PACKET_COUNTS = {
+    "deauth": {
+        "deauth_alerts": 30,
+        "rogue_ap_alerts": 0,
+        "weak_encryption_alerts": 0,
+    },
+    "rogue_ap": {
+        "deauth_alerts": 0,
+        "rogue_ap_alerts": 15,
+        "weak_encryption_alerts": 0,
+    },
+    "weak_encryption": {
+        "deauth_alerts": 0,
+        "rogue_ap_alerts": 0,
+        "weak_encryption_alerts": 30,
+    },
+}
 
 FAKE_DEVICE_NAMES = (
     "ThinkPad-T14",
@@ -111,21 +140,34 @@ def _unique_mac(rng: random.Random, used: set[str]) -> str:
 
 
 def random_demo_seed() -> int:
-    return time.time_ns() % (2**32)
+    """Return a cryptographically random 32-bit seed for each generation call."""
+    try:
+        return int.from_bytes(os.urandom(4), "big")
+    except OSError:
+        logging.getLogger(__name__).warning(
+            "os.urandom unavailable; falling back to time-based seed"
+        )
+        return time.time_ns() % (2**32)
 
 
 def next_demo_pcap_path(
     output_dir: str | Path = DEFAULT_OUTPUT.parent,
-    stem: str = DEFAULT_OUTPUT.stem,
-    suffix: str = DEFAULT_OUTPUT.suffix,
+    prefix: str = RANDOM_PREFIX,
+    suffix: str = ".pcap",
 ) -> Path:
+    """Return the next 4-digit numbered PCAP path for a safe filename prefix."""
+    prefix = prefix.strip()
+    if not prefix or "/" in prefix or "\\" in prefix:
+        raise ValueError(f"Invalid pcap prefix: {prefix!r}")
+
     output_path = Path(output_dir)
-    index = 1
-    while True:
-        candidate = output_path / f"{stem}_{index:03d}{suffix}"
+    output_path.mkdir(parents=True, exist_ok=True)
+    for index in range(1, 10000):
+        candidate = output_path / f"{prefix}_{index:04d}{suffix}"
         if not candidate.exists():
             return candidate
-        index += 1
+
+    raise RuntimeError(f"Exhausted 9999 pcap slots for prefix {prefix!r}")
 
 
 def build_demo_scenario(seed: int = DEFAULT_SEED) -> DemoScenario:
@@ -172,12 +214,13 @@ def make_beacon(
     ssid: str,
     security: str | None = None,
     channel: int | None = None,
+    transmitter: str | None = None,
 ):
     dot11 = Dot11(
         type=0,
         subtype=8,
         addr1="ff:ff:ff:ff:ff:ff",
-        addr2=bssid,
+        addr2=transmitter or bssid,
         addr3=bssid,
     )
     beacon = Dot11Beacon(
@@ -325,6 +368,107 @@ def build_demo_packets(
     return packets
 
 
+def build_alert_type_packets(alert_type: str, seed: int = DEFAULT_SEED) -> list:
+    """Build packets for a single alert-type sample PCAP."""
+    normalized_alert_type = alert_type.strip().lower()
+    if normalized_alert_type not in ALERT_TYPE_SLUGS:
+        raise ValueError(
+            f"Unknown alert_type {normalized_alert_type!r}. "
+            f"Valid options: {sorted(ALERT_TYPE_SLUGS)}"
+        )
+
+    if normalized_alert_type == "unknown_device":
+        return _build_unknown_device_packets(seed)
+    if normalized_alert_type == "deauth":
+        return _build_deauth_packets(seed)
+    if normalized_alert_type == "rogue_ap":
+        return _build_rogue_ap_packets(seed)
+    return _build_weak_encryption_packets(seed)
+
+
+def _build_deauth_packets(seed: int) -> list:
+    """Generate only deauth frames from known lab clients."""
+    scenario = build_demo_scenario(seed)
+    source, victim = AUTHORIZED_CLIENT_MACS
+    return [
+        make_deauth(source, victim, bssid=scenario.authorized_ap.bssid)
+        for _ in range(ALERT_TYPE_PACKET_COUNTS["deauth"]["deauth_alerts"])
+    ]
+
+
+def _build_rogue_ap_packets(seed: int) -> list:
+    """Generate unknown AP beacons without weak security or unknown clients."""
+    scenario = build_demo_scenario(seed)
+    rng = build_rng(seed + 1)
+    used_macs = {scenario.authorized_ap.bssid}
+    transmitter = AUTHORIZED_CLIENT_MACS[0]
+    packets = []
+
+    for _ in range(ALERT_TYPE_PACKET_COUNTS["rogue_ap"]["rogue_ap_alerts"]):
+        packets.append(
+            make_beacon(
+                _unique_mac(rng, used_macs),
+                choose_fake_ssid(rng),
+                security="WPA2",
+                channel=rng.choice((1, 6, 11)),
+                transmitter=transmitter,
+            )
+        )
+
+    return packets
+
+
+def _build_weak_encryption_packets(seed: int) -> list:
+    """Generate weak-security beacons on the authorized lab AP."""
+    scenario = build_demo_scenario(seed)
+    rng = build_rng(seed + 1)
+    transmitter = AUTHORIZED_CLIENT_MACS[0]
+    packets = []
+
+    for _ in range(
+        ALERT_TYPE_PACKET_COUNTS["weak_encryption"]["weak_encryption_alerts"]
+    ):
+        packets.append(
+            make_beacon(
+                scenario.authorized_ap.bssid,
+                choose_fake_ssid(rng),
+                security=choose_weak_security(rng),
+                channel=scenario.authorized_ap.channel,
+                transmitter=transmitter,
+            )
+        )
+
+    return packets
+
+
+def _build_unknown_device_packets(seed: int) -> list:
+    """Generate association requests from MACs outside the authorized whitelist."""
+    scenario = build_demo_scenario(seed)
+    rng = build_rng(seed + 1)
+    used_macs = {
+        *AUTHORIZED_CLIENT_MACS,
+        scenario.authorized_ap.bssid,
+        scenario.attacker.mac,
+    }
+    packets = []
+
+    for _ in range(20):
+        unknown = FakeDevice(
+            name=choose_fake_device(rng),
+            mac=_unique_mac(rng, used_macs),
+        )
+        packets.append(
+            make_association_request(
+                unknown.mac,
+                scenario.authorized_ap.bssid,
+                unknown.name,
+                scenario.authorized_ap.ssid,
+            )
+        )
+
+    return packets
+
+
 def write_demo_pcap(
     output: str | Path = DEFAULT_OUTPUT,
     seed: int = DEFAULT_SEED,
@@ -339,7 +483,29 @@ def write_numbered_demo_pcap(
     output_dir: str | Path = DEFAULT_OUTPUT.parent,
     seed: int | None = None,
 ) -> GeneratedPcap:
-    chosen_seed = random_demo_seed() if seed is None else seed
-    output_path = next_demo_pcap_path(output_dir)
-    written = write_demo_pcap(output=output_path, seed=chosen_seed)
-    return GeneratedPcap(path=written, seed=chosen_seed)
+    chosen_seed = random_demo_seed() if seed is None else int(seed)
+    output_path = next_demo_pcap_path(output_dir, prefix=RANDOM_PREFIX)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    wrpcap(str(output_path), build_demo_packets(seed=chosen_seed))
+    return GeneratedPcap(path=output_path, seed=chosen_seed)
+
+
+def write_alert_type_pcap(
+    alert_type: str,
+    output_dir: str | Path = DEFAULT_OUTPUT.parent,
+    seed: int | None = None,
+) -> GeneratedPcap:
+    """Generate and save a PCAP containing frames for one alert type."""
+    normalized_alert_type = alert_type.strip().lower()
+    if normalized_alert_type not in ALERT_TYPE_SLUGS:
+        raise ValueError(f"Unknown alert_type: {normalized_alert_type!r}")
+
+    chosen_seed = random_demo_seed() if seed is None else int(seed)
+    slug = ALERT_TYPE_SLUGS[normalized_alert_type]
+    output_path = next_demo_pcap_path(output_dir, prefix=f"{slug}_capture")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    wrpcap(
+        str(output_path),
+        build_alert_type_packets(normalized_alert_type, seed=chosen_seed),
+    )
+    return GeneratedPcap(path=output_path, seed=chosen_seed)

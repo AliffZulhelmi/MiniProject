@@ -121,12 +121,12 @@ def test_different_seeds_generate_different_demo_samples(tmp_path: Path):
 
 
 def test_next_demo_pcap_path_uses_incrementing_number(tmp_path: Path):
-    assert gen.next_demo_pcap_path(tmp_path) == tmp_path / "demo_capture_001.pcap"
+    assert gen.next_demo_pcap_path(tmp_path) == tmp_path / "random_capture_0001.pcap"
 
-    (tmp_path / "demo_capture_001.pcap").touch()
-    (tmp_path / "demo_capture_002.pcap").touch()
+    (tmp_path / "random_capture_0001.pcap").touch()
+    (tmp_path / "random_capture_0002.pcap").touch()
 
-    assert gen.next_demo_pcap_path(tmp_path) == tmp_path / "demo_capture_003.pcap"
+    assert gen.next_demo_pcap_path(tmp_path) == tmp_path / "random_capture_0003.pcap"
 
 
 def test_generated_pcap_triggers_existing_detectors(tmp_path: Path):
