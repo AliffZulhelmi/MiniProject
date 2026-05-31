@@ -12,17 +12,17 @@ def render_sidebar(session: object) -> None:
         render_logout_control(session)
         st.divider()
 
-        st.header("📡 Sample Generator")
+        st.header("Sample Generator")
         st.caption(
             "Generate a synthetic PCAP to demo the detectors. "
-            "Random mode includes all alert types. "
-            "Alert-type mode isolates one specific threat."
+            "Random mode includes all alert types while alert-type mode isolates one specific threat."
+            # "Alert-type mode isolates one specific threat."
         )
         st.divider()
 
-        st.subheader("🎲 Random PCAP")
+        st.subheader("Random PCAP")
         st.caption(
-            "Produces a randomized mix of deauth attacks, rogue APs, "
+            "Generate PCAP with a randomized detector mix of deauth attacks, rogue APs, "
             "weak encryption beacons, and unknown devices."
         )
         if st.button(
@@ -34,10 +34,10 @@ def render_sidebar(session: object) -> None:
 
         st.divider()
 
-        st.subheader("🎯 Alert-Type PCAP")
-        st.caption("Generates a PCAP containing frames for one alert type.")
+        st.subheader("Alert-Type PCAP")
+        st.caption("Generates a PCAP containing frames for one specific alert type.")
         if st.button(
-            "Generate by alert type...",
+            "Generate by alert type",
             key="btn_alert_type_sidebar",
             use_container_width=True,
         ):
