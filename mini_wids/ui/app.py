@@ -19,6 +19,7 @@ from mini_wids.ui.alert_tables import (
     filter_rows,
     flatten_results,
 )
+from mini_wids.ui.auth import require_authentication
 from mini_wids.ui.sidebar import render_sidebar
 
 ALERT_TYPE_DISPLAY = {
@@ -65,6 +66,8 @@ def _handle_alert_type_generate(alert_type: str) -> None:
 
 
 st.set_page_config(page_title="Mini WIDS Demo", layout="wide")
+require_authentication()
+
 st.title("Mini WIDS — Demo")
 
 st.markdown(

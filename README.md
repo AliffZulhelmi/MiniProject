@@ -69,4 +69,17 @@ If `streamlit` is not on your PATH, use:
 python -m streamlit run mini_wids/ui/app.py
 ```
 
+### Dashboard login
+
+The Streamlit dashboard requires the single administrator account before any
+PCAP upload, sample generation, detector output, or database save action is
+shown.
+
+- Username: `administrator`
+- Password: the administrator password supplied with the project handoff
+- Signup, reset, and additional user flows are intentionally not available
+- The password is verified with a salted PBKDF2-HMAC-SHA256 hash
+- Sessions expire after 15 minutes idle or 60 minutes total
+- Repeated failed logins are rate-limited and temporarily locked out
+
 See `docs/project-structure.md` and `docs/superpowers/plans/2026-05-15-mini-wids-dashboard.md` for the implementation map.

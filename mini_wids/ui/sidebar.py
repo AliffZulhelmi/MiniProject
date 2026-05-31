@@ -3,11 +3,15 @@
 import streamlit as st
 
 from mini_wids.sample_pcap_generator import write_numbered_demo_pcap
+from mini_wids.ui.auth import render_logout_control
 
 
 def render_sidebar(session: object) -> None:
     """Render sample generation controls inside Streamlit's native sidebar."""
     with st.sidebar:
+        render_logout_control(session)
+        st.divider()
+
         st.header("📡 Sample Generator")
         st.caption(
             "Generate a synthetic PCAP to demo the detectors. "
