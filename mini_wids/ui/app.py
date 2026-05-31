@@ -10,6 +10,7 @@ import plotly.express as px
 import streamlit as st
 
 from mini_wids.engine import process_pcap
+from mini_wids.reporting.report_builder import export_alerts_csv
 from mini_wids.sample_pcap_generator import ALERT_TYPE_SLUGS, write_alert_type_pcap
 from mini_wids.storage.repository import save_alerts
 from mini_wids.ui.alert_tables import (
@@ -503,3 +504,10 @@ else:
                 flat.append(entry)
             save_alerts(flat)
             st.success("Saved alerts")
+
+        if st.button("Generate CSV report"):
+            try:
+                report_path = export_alerts_csv("data/exports/alerts_report.csv")
+                st.success(f"Report generated: {report_path}")
+            except Exception as exc:
+                st.error(f"Report generation failed: {exc}")
